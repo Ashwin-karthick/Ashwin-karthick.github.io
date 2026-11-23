@@ -13,8 +13,8 @@ android {
         // 28 on purpose: apps targeting 29+ may not run programs from their own storage, which the
         // bundled Linux needs (same choice as Termux). This also means no Google Play listing.
         targetSdk = 28
-        versionCode = 1
-        versionName = "0.1.0-proof"
+        versionCode = 2
+        versionName = "0.1.1-proof"
         ndk { abiFilters += "arm64-v8a" }
     }
 

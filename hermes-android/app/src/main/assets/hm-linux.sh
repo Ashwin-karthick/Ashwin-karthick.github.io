@@ -21,12 +21,15 @@ else
 fi
 
 # A clean environment inside Ubuntu; nothing from Android leaks in except what is listed here.
+# UV_LINK_MODE=copy: uv hard-links by default, which fails under proot's --link2symlink
+# ("failed to hardlink ... .l2s.*: Invalid argument"), so Hermes' Python install needs copies.
 # shellcheck disable=SC2086
 set -- /usr/bin/env -i \
   HOME=/root USER=root LOGNAME=root SHELL=/bin/bash \
   TERM="${TERM:-xterm-256color}" COLORTERM=truecolor LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp \
   PATH=/root/.local/bin:/root/.hermes/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
   HM_SECRET="${HM_SECRET:-}" HERMES_DASHBOARD_SESSION_TOKEN="${HERMES_DASHBOARD_SESSION_TOKEN:-}" \
+  UV_LINK_MODE=copy \
   ${HM_GUEST_ENV:-} \
   "$@"
 
