@@ -33,13 +33,23 @@ Allow notifications if asked: the app shows one while it is working so Android d
 
 ## What to expect
 
-| | Measured in testing* |
-|---|---|
-| Ubuntu download | 30 MB |
-| Ubuntu after step 3 | about 540 MB |
-| After installing Hermes | see the test notes in the pull request or commit |
+Measured on a desktop running the same ARM64 Ubuntu under emulation (qemu), not on a phone:
 
-\*Measured on a desktop running the same ARM64 Ubuntu under emulation, not on a phone. Times on a phone will differ.
+| Step | Time under emulation | Disk used afterwards |
+|---|---|---|
+| Download and unpack Ubuntu | seconds (30 MB download) | about 110 MB |
+| Prepare Ubuntu | about 4 minutes | about 540 MB |
+| Install Hermes (v2026.9.24) | about 12 minutes | about 3.9 GB |
+| Start Hermes, test the connection | about 80 seconds to first start | |
+
+Keep at least 5 GB free. Phone times will differ from these.
+
+During **Install Hermes**, one line fails: `cua-driver` (desktop computer-use) needs a graphical
+display, which a phone terminal doesn't have. The installer continues and the step still succeeds.
+
+In the API test, Hermes refuses calls without the app's token (401) and answers with it (200) for
+skills, cron jobs, memory and profiles. Sessions and usage answer only once the Hermes gateway is
+running, which a later phase will start.
 
 ## If a step says "Android stopped this step (signal 9)"
 
