@@ -38,7 +38,10 @@ jobs:
         with:
           name: hermes-mobile-apk
           path: hermes-android/hermes-mobile-*.apk
+      # Needs Settings > Actions > General > Workflow permissions set to "Read and write".
+      # Without it this step fails harmlessly and the APK is still in the run's artifacts.
       - name: Publish to the hermes-android-latest pre-release
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
