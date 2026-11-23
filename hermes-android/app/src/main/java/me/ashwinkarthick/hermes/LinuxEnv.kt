@@ -21,6 +21,7 @@ class LinuxEnv(private val context: Context) {
     val prootTmp = File(base, "proot-tmp")
     val launcher = File(base, "hm-linux.sh")
     val download = File(base, "ubuntu-base.tar.gz")
+    private val l2sDir = File(rootfs, ".l2s")
     private val rootfsMarker = File(base, ".rootfs-complete")
 
     val nativeDir = File(context.applicationInfo.nativeLibraryDir)
@@ -64,6 +65,7 @@ class LinuxEnv(private val context: Context) {
                 "nr_zone_write_pending 0\nnr_mlock 0\npgpgin 198292\npgpgout 0\npswpin 0\npswpout 0\n"
         )
         File(sysdata, "sys_empty").mkdirs()
+        if (rootfs.isDirectory) l2sDir.mkdirs()
     }
 
     /** Files inside Ubuntu the app manages: DNS, hosts, and the step scripts. */
@@ -72,6 +74,7 @@ class LinuxEnv(private val context: Context) {
         // Android has no resolv.conf to bind, so Ubuntu gets public resolvers.
         File(rootfs, "etc/resolv.conf").apply { delete() }.writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
         File(rootfs, "etc/hosts").writeText("127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n")
+        l2sDir.mkdirs()
         val tmp = File(rootfs, "tmp").apply { mkdirs() }
         Os.chmod(tmp.path, "1777".toInt(8))
         val dir = File(rootfs, "opt/hermes-mobile").apply { mkdirs() }
@@ -96,6 +99,9 @@ class LinuxEnv(private val context: Context) {
         env["PROOT_LOADER"] = loader.path
         env["PROOT_TMP_DIR"] = prootTmp.path
         env["LD_LIBRARY_PATH"] = "${libDir.path}:${nativeDir.path}"
+        // Keep proot's hard-link placeholders in one folder instead of next to each file, so tools
+        // that walk folders (uv) never see them. Same setting proot-distro uses.
+        env["PROOT_L2S_DIR"] = l2sDir.path
         env.putAll(extra)
         return env.map { (k, v) -> "$k=$v" }.toTypedArray()
     }
