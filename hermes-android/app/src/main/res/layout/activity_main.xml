@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="10dp">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Hermes"
+                android:textColor="@color/ink"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.04" />
+            <TextView
+                android:id="@+id/subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Test build: setting up Hermes on this phone"
+                android:textColor="@color/muted"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Tabs -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/card"
+        android:padding="4dp"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/tab_setup"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Setup"
+            android:textColor="@color/ink"
+            android:textSize="15sp"
+            android:background="@drawable/tab_bg"
+            android:clickable="true"
+            android:focusable="true" />
+        <TextView
+            android:id="@+id/tab_terminal"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Terminal"
+            android:textColor="@color/ink"
+            android:textSize="15sp"
+            android:background="@drawable/tab_bg"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Setup page -->
+        <ScrollView
+            android:id="@+id/page_setup"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="24dp">
+
+                <LinearLayout
+                    android:id="@+id/steps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <Button
+                    android:id="@+id/run_all"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/btn_primary"
+                    android:text="Run all steps"
+                    android:textAllCaps="false"
+                    android:textColor="@color/accent_ink"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:stateListAnimator="@null" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+                    <Button
+                        android:id="@+id/share_log"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/btn_secondary"
+                        android:text="Share log"
+                        android:textAllCaps="false"
+                        android:textColor="@color/ink"
+                        android:stateListAnimator="@null" />
+                    <Button
+                        android:id="@+id/battery"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/btn_secondary"
+                        android:text="Battery settings"
+                        android:textAllCaps="false"
+                        android:textColor="@color/ink"
+                        android:stateListAnimator="@null" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Each step runs in the built-in terminal. Open the Terminal tab to watch it, or to type commands yourself. If a step fails, tap Share log and send the log back."
+                    android:textColor="@color/muted"
+                    android:textSize="13.5sp"
+                    android:lineSpacingMultiplier="1.2" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- Terminal page -->
+        <LinearLayout
+            android:id="@+id/page_terminal"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+                <LinearLayout
+                    android:id="@+id/session_tabs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp" />
+            </HorizontalScrollView>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@color/terminal_bg">
+                <com.termux.view.TerminalView
+                    android:id="@+id/terminal"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true" />
+                <TextView
+                    android:id="@+id/terminal_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:padding="32dp"
+                    android:text="Nothing is running yet. Start a setup step, or open a shell with the + button."
+                    android:textColor="@color/muted"
+                    android:textSize="15sp" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/extra_keys"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:background="@color/surface"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

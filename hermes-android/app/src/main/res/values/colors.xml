@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#0F1620</color>
+    <color name="surface">#17202C</color>
+    <color name="surface2">#1F2A38</color>
+    <color name="line">#283447</color>
+    <color name="ink">#E4E9F0</color>
+    <color name="muted">#8D9AAB</color>
+    <color name="accent">#8A9BFF</color>
+    <color name="accent_ink">#0F1620</color>
+    <color name="ok">#4CC38A</color>
+    <color name="danger">#FF7B72</color>
+    <color name="signal">#F2B544</color>
+    <color name="terminal_bg">#0A0F16</color>
+    <color name="launcher_bg">#2B44E0</color>
+</resources>

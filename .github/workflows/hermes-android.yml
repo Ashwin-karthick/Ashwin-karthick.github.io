@@ -1,0 +1,44 @@
+name: Hermes Android APK
+
+on:
+  push:
+    paths:
+      - "hermes-android/**"
+      - ".github/workflows/hermes-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hermes-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Fetch proot (pinned by SHA-256)
+        run: ./tools/fetch-proot.sh
+      - name: Build and test
+        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk "hermes-mobile-${GITHUB_SHA::7}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-mobile-apk
+          path: hermes-android/hermes-mobile-*.apk
+      - name: Publish to the hermes-android-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete hermes-android-latest --yes --cleanup-tag || true
+          gh release create hermes-android-latest hermes-mobile-*.apk \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "Hermes for Android (test build ${GITHUB_SHA::7})" \
+            --notes "Phase 1 test build from ${GITHUB_REF_NAME}. Signed with the public test key; see hermes-android/README.md."
