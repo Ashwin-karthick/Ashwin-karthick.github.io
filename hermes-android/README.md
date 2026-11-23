@@ -19,6 +19,21 @@ anything, including `hermes`.
 The friendly setup wizard (connect AI, web tools and so on) and the Astryx dashboard come in later
 phases, once this build has shown it works on your phone.
 
+## After install: set up your assistant (0.2.0)
+
+When the install steps are done, the Setup tab shows four cards. No terminal is needed:
+
+- **Hermes**: Start or Stop. The app keeps Hermes' dashboard (its API for the app) and gateway
+  (Telegram, scheduled jobs) running, and restarts the gateway if Hermes exits to restart itself.
+- **AI model**: pick a provider and paste an API key. The key is checked with that provider's own API,
+  then saved inside Hermes, which picks its recommended model (for Anthropic: claude-sonnet-5).
+- **Telegram**: Hermes creates a private bot for you. Tap Connect, tap Start in Telegram, come back.
+- **Web search**: one tap turns on the free Tavily tier (no account, rate-limited).
+
+How it's done: the app calls Hermes' dashboard API (`PUT /api/env`, `/api/model/recommended-default`,
+`PUT /api/profiles/default/model`, `PUT /api/config`, `/api/messaging/telegram/onboarding/*`) and runs
+`hermes gateway run --external-supervisor`, so Hermes' own restarts come back to the app.
+
 ## Install on your phone
 
 1. Download the APK (`hermes-mobile-*.apk`).

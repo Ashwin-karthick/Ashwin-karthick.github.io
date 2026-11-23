@@ -139,14 +139,36 @@ class HermesRuntime(
         return code == 200 && runCatching { JSONObject(body).optBoolean("gateway_running") }.getOrDefault(false)
     }
 
-    /** Stops a gateway this app didn't start (only called while the app's own isn't running). */
+    /**
+     * Stops a gateway this app didn't start (only called while the app's own isn't running).
+     * `hermes gateway stop` can't always confirm the process under proot, so the app reads the PID
+     * Hermes records, checks it really is a Hermes gateway, and signals it directly: under proot,
+     * Ubuntu's process numbers are the real Android ones, and an app may signal its own processes.
+     */
     private fun stopForeignGateway(progress: (String) -> Unit) {
-        if (!gatewayReportedRunning()) return
+        val pid = recordedGatewayPid() ?: return
         progress("Stopping an extra copy of Hermes' background service…")
-        val stopper = svc.startSessionOnMain("Hermes (stop extra gateway)", "hermes gateway stop")
-        val until = System.currentTimeMillis() + 60_000
-        while (System.currentTimeMillis() < until && (stopper.isRunning || gatewayReportedRunning())) Thread.sleep(1000)
+        android.os.Process.sendSignal(pid, 15)                     // SIGTERM: Hermes shuts down cleanly
+        var until = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < until && isHermesGateway(pid)) Thread.sleep(500)
+        if (isHermesGateway(pid)) {
+            android.os.Process.sendSignal(pid, 9)                  // SIGKILL as a last resort
+            until = System.currentTimeMillis() + 5_000
+            while (System.currentTimeMillis() < until && isHermesGateway(pid)) Thread.sleep(300)
+        }
     }
+
+    private fun recordedGatewayPid(): Int? {
+        val state = java.io.File(svc.linuxRootfs, "root/.hermes/gateway_state.json")
+        val pid = runCatching { JSONObject(state.readText()).optInt("pid", 0) }.getOrDefault(0)
+        return pid.takeIf { it > 1 && isHermesGateway(it) }
+    }
+
+    /** True when [pid] is alive and its command line is a Hermes gateway (guards against PID reuse). */
+    private fun isHermesGateway(pid: Int): Boolean = runCatching {
+        val cmd = java.io.File("/proc/$pid/cmdline").readText().replace('\u0000', ' ')
+        "hermes" in cmd && "gateway" in cmd
+    }.getOrDefault(false)
 
     /** Settings are read when the gateway starts, so restart it after a change (if it is running). */
     private fun restartGatewayIfRunning() {

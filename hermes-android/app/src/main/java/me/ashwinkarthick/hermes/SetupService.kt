@@ -75,6 +75,7 @@ class SetupService : Service(), TerminalSessionClient {
     private val prefs by lazy { getSharedPreferences("setup", Context.MODE_PRIVATE) }
     lateinit var runtime: HermesRuntime
         private set
+    val linuxRootfs: File get() = env.rootfs
 
     /** All five install steps are done. */
     val installed: Boolean get() = steps.all { it.state == State.DONE } || (env.rootfsReady && prefs.getBoolean("done_HERMES", false))
