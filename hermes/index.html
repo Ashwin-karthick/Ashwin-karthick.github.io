@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Hermes Mobile</title>
+  <meta name="description" content="A mobile client for your self-hosted Hermes Agent.">
+  <meta name="theme-color" content="#E9EDF2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F1620" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Hermes">
+  <meta name="referrer" content="no-referrer">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app" class="app">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <button class="icon-btn" id="btn-menu" aria-label="Open menu" aria-controls="drawer" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+      </button>
+      <button class="title-btn" id="btn-title" aria-label="Rename conversation">
+        <span class="title-text" id="conv-title">New conversation</span>
+        <span class="conn" id="conn-pill"><span class="conn-dot"></span><span id="conn-label">Not connected</span></span>
+      </button>
+      <button class="icon-btn" id="btn-new" aria-label="New conversation">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </header>
+
+    <!-- Conversation -->
+    <main class="thread" id="thread" aria-live="polite" aria-busy="false">
+      <section class="empty" id="empty">
+        <h1 class="wordmark">Hermes</h1>
+        <p class="empty-lede" id="empty-lede">Your agent is standing by. Ask it to do something on your server.</p>
+        <div class="starters" id="starters"></div>
+        <button class="setup-link" id="btn-setup" hidden>Connect to your Hermes server</button>
+        <button class="demo-link" id="btn-demo" hidden>Try demo mode</button>
+      </section>
+      <div class="messages" id="messages"></div>
+    </main>
+
+    <button class="jump" id="btn-jump" aria-label="Scroll to latest" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+    </button>
+
+    <!-- Composer -->
+    <footer class="composer">
+      <form class="composer-box" id="composer">
+        <label class="sr-only" for="input">Message Hermes</label>
+        <textarea id="input" rows="1" placeholder="Message Hermes" enterkeyhint="send" autocomplete="off"></textarea>
+        <button class="send" id="btn-send" type="submit" aria-label="Send" disabled>
+          <svg class="i-send" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </button>
+      </form>
+    </footer>
+
+    <!-- Drawer -->
+    <div class="scrim" id="scrim" hidden></div>
+    <nav class="drawer" id="drawer" aria-label="Conversations and tools" aria-hidden="true">
+      <div class="drawer-head">
+        <span class="drawer-mark">Hermes</span>
+        <button class="icon-btn" id="btn-close-drawer" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="drawer-nav">
+        <button class="nav-item" data-sheet="skills">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/></svg>
+          Skills
+        </button>
+        <button class="nav-item" data-sheet="tools">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L4 16.8V20h3.2l5.3-5.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+          Tools
+        </button>
+        <button class="nav-item" data-sheet="jobs">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+          Scheduled jobs
+        </button>
+        <button class="nav-item" data-sheet="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          Settings
+        </button>
+      </div>
+      <h2 class="drawer-sub">Conversations</h2>
+      <ul class="conv-list" id="conv-list"></ul>
+    </nav>
+
+    <!-- Bottom sheet (skills / tools / jobs / settings) -->
+    <div class="sheet-scrim" id="sheet-scrim" hidden></div>
+    <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="sheet-title">Settings</h2>
+        <button class="icon-btn" id="btn-close-sheet" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body" id="sheet-body"></div>
+    </section>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
