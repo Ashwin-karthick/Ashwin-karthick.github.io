@@ -146,7 +146,16 @@ class MainActivity : Activity(), SetupService.Listener {
                 else -> "Start"
             }
             run.isEnabled = !busy
-            run.setOnClickListener { s.runStep(step.id) }
+            run.setOnClickListener {
+                if (step.id == SetupService.StepId.LINUX && step.state == SetupService.State.DONE) {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Reinstall Ubuntu?")
+                        .setMessage("This deletes the Linux system and everything installed in it, including Hermes and its settings. You'll need to run the later steps again.")
+                        .setPositiveButton("Delete and reinstall") { _, _ -> s.runStep(step.id) }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                } else s.runStep(step.id)
+            }
 
             val view = v.findViewById<Button>(R.id.view_output)
             val session = step.session

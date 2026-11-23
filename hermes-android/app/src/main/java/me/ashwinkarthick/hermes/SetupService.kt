@@ -165,6 +165,12 @@ class SetupService : Service(), TerminalSessionClient {
         }
         step.detail = "Unpacking Ubuntu…"; step.progress = 0; changed()
         env.clearRootfs()
+        // Everything after this step lived inside the old Ubuntu, so it has to run again.
+        for (later in steps) if (later.id > StepId.LINUX) {
+            later.state = State.WAITING; later.detail = ""; later.session = null
+            prefs.edit().remove("done_${later.id}").remove("detail_${later.id}").apply()
+        }
+        changed()
         val total = env.download.length().coerceAtLeast(1)
         val result = RootfsExtractor(
             chmod = { p, mode -> android.system.Os.chmod(p.toString(), mode) },
