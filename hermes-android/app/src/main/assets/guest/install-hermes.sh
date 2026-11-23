@@ -5,7 +5,8 @@ echo
 echo "==> Downloading the Hermes installer"
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh -o /tmp/hermes-install.sh
 echo "==> Installing Hermes Agent (this can take a while on a phone)"
-bash /tmp/hermes-install.sh --skip-setup
+# --skip-computer-use: desktop control needs a graphical display, which a phone terminal doesn't have.
+bash /tmp/hermes-install.sh --skip-setup --skip-computer-use
 echo
 echo "==> Checking the install"
 command -v hermes

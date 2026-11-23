@@ -44,8 +44,13 @@ Measured on a desktop running the same ARM64 Ubuntu under emulation (qemu), not 
 
 Keep at least 5 GB free (step 1 checks this). Phone times will differ from these.
 
-During **Install Hermes**, one line fails: `cua-driver` (desktop computer-use) needs a graphical
-display, which a phone terminal doesn't have. The installer continues and the step still succeeds.
+The installer skips `cua-driver` (desktop computer-use): it needs a graphical display, which a
+phone terminal doesn't have. Builds before 0.1.4 tried it and showed one harmless failed line.
+
+When every step is done, the big button becomes **Open Hermes**: it runs `hermes` in the terminal.
+The first time, Hermes walks you through its own setup (choosing an AI provider and so on).
+
+Measured on a real phone (0.1.3): Install Hermes took 26 minutes, and all five steps passed.
 
 In the API test, Hermes refuses calls without the app's token (401) and answers with it (200) for
 skills, cron jobs, memory and profiles. Sessions and usage answer only once the Hermes gateway is

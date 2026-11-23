@@ -65,7 +65,11 @@ class MainActivity : Activity(), SetupService.Listener {
         findViewById<View>(R.id.tab_setup).setOnClickListener { showPage(terminal = false) }
         findViewById<View>(R.id.tab_terminal).setOnClickListener { showPage(terminal = true) }
         findViewById<Button>(R.id.run_all).setOnClickListener {
-            service?.runAllSteps()
+            val s = service ?: return@setOnClickListener
+            if (s.nextStep() == null) {
+                // Setup is finished: open Hermes itself in the terminal.
+                showSession(s.openHermes()); showPage(terminal = true)
+            } else s.runAllSteps()
         }
         findViewById<Button>(R.id.share_log).setOnClickListener { shareLog() }
         findViewById<Button>(R.id.battery).setOnClickListener { openBatterySettings() }
@@ -164,10 +168,10 @@ class MainActivity : Activity(), SetupService.Listener {
         }
         val runAll = findViewById<Button>(R.id.run_all)
         val next = s.nextStep()
-        runAll.isEnabled = !busy && next != null
+        runAll.isEnabled = !busy
         runAll.text = when {
             busy -> "Working…"
-            next == null -> "All steps done"
+            next == null -> "Open Hermes"
             next === s.steps.first() -> "Run all steps"
             else -> "Continue from “${next.title}”"
         }
@@ -195,7 +199,7 @@ class MainActivity : Activity(), SetupService.Listener {
                 isSelected = session === shownSession
                 setOnClickListener { showSession(session) }
                 setOnLongClickListener {
-                    if (!session.isRunning || session.mSessionName.startsWith("Shell")) {
+                    if (!session.isRunning || session.mSessionName.startsWith("Shell") || session.mSessionName == "Hermes") {
                         s.closeSession(session)
                         if (shownSession === session) shownSession = null
                         s.sessions.lastOrNull()?.let { showSession(it) } ?: updateEmpty()

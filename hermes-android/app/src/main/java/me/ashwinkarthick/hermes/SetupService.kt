@@ -323,13 +323,18 @@ class SetupService : Service(), TerminalSessionClient {
 
     // ---------------------------------------------------------------- sessions
 
+    /** Runs `hermes` (its own first-run setup the first time), then leaves a normal shell open. */
+    fun openHermes(): TerminalSession =
+        startSession(null, env.ubuntuArgs("hermes; echo; echo 'Hermes closed. This is a normal Ubuntu shell; type hermes to start it again.'; exec bash -l"),
+            name = "Hermes")
+
     fun openShell(): TerminalSession = startSession(null,
         if (env.rootfsReady) env.ubuntuArgs(null) else arrayOf("sh"))
 
-    private fun startSession(step: Step?, args: Array<String>, extraEnv: Map<String, String> = emptyMap()): TerminalSession {
+    private fun startSession(step: Step?, args: Array<String>, extraEnv: Map<String, String> = emptyMap(), name: String? = null): TerminalSession {
         if (step == null || step.id != StepId.PHONE) env.prepareHost()
         val session = TerminalSession(LinuxEnv.SHELL, env.base.path, args, env.environment(extraEnv), TRANSCRIPT_ROWS, this)
-        session.mSessionName = step?.title ?: "Shell ${sessions.count { it.mSessionName.startsWith("Shell") } + 1}"
+        session.mSessionName = name ?: step?.title ?: "Shell ${sessions.count { it.mSessionName.startsWith("Shell") } + 1}"
         // The process starts when the emulator gets a size. Give it one now so a step runs even if
         // its terminal is never on screen; the terminal view resizes it when shown.
         session.updateSize(80, 30)
