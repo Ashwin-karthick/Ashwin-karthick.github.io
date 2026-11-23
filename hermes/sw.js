@@ -1,5 +1,5 @@
 /* Hermes Mobile service worker: caches the app shell only. API calls (any other origin) are never touched. */
-const VERSION = "hm-v1";
+const VERSION = "hm-v2";
 const SHELL = ["./", "index.html", "app.css", "app.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-180.png"];
 
 self.addEventListener("install", (e) => {

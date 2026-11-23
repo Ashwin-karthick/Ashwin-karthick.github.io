@@ -38,6 +38,7 @@ Once this branch is merged and GitHub Pages publishes it, the app lives at `http
 
 ## Notes
 
-- **Where data lives.** The API key and conversations are stored in this browser's `localStorage` on your device. Hermes also keeps its own session history on the server. Model output is escaped before rendering, so it can't inject HTML or script into the page.
+- **Where data lives.** The API key and conversations are stored in this browser's `localStorage` on your device. Hermes also keeps its own session history on the server. Model output is escaped before rendering and the page sets a strict Content Security Policy, so replies can't inject HTML or script. Images from remote URLs in replies show as links instead of loading automatically, so a web page the agent reads can't use them to send data out.
 - **How conversations map to Hermes sessions.** Each turn sends the full transcript, which is the same mode Open WebUI uses. Hermes derives a stable session from the system prompt and first message. The app adds a short per-conversation tag to the system message so that two chats with the same opening line don't share a session.
 - **Notifications** fire only while the app is open in the background. True push notifications would need a server-side component.
+- **Known limits.** Only the text of earlier replies is re-sent each turn, so the agent doesn't see earlier tool output unless Hermes recalls it from its own memory. Changing the instructions setting partway through a chat starts a new Hermes session for that chat.

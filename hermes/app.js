@@ -93,31 +93,43 @@
   }
 
   // ---------- markdown (escape first, then a small safe subset) ----------
+  const unesc = (s) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[e]));
   function safeUrl(url, forImage) {
-    const u = String(url).trim().replace(/&amp;/g, "&");
+    const u = unesc(String(url).trim());
     if (/^https?:\/\//i.test(u)) return u;
     if (forImage && /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(u)) return u;
     return null;
   }
-  function inline(text) {
-    // text is already HTML-escaped
-    const codes = [];
-    let s = text.replace(/`([^`\n]+)`/g, (_, c) => { codes.push(c); return `\u0000${codes.length - 1}\u0000`; });
-    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, url) => {
-      const u = safeUrl(url, true);
-      return u ? `<img alt="${alt}" src="${esc(u)}" loading="lazy">` : m;
-    });
-    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, url) => {
-      const u = safeUrl(url, false);
-      return u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${label}</a>` : m;
-    });
-    s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+[^\s<).,;:!?'"])/g, (m, pre, url) =>
-      `${pre}<a href="${esc(url.replace(/&amp;/g, "&"))}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+  function emphasis(s) {
     s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
     s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>");
     s = s.replace(/(^|[^_\w])_([^_\n]+)_(?!\w)/g, "$1<em>$2</em>");
-    s = s.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
-    return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
+    return s.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  }
+  function inline(text) {
+    // `text` is already HTML-escaped. Every piece of markup this function generates is parked in
+    // `tokens` behind a placeholder at once, so later passes never see (or rewrite) generated HTML.
+    const tokens = [];
+    const park = (html) => { tokens.push(html); return `\u0000${tokens.length - 1}\u0000`; };
+    const linkTo = (u, labelHtml) => park(`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${labelHtml}</a>`);
+    let s = text.replace(/\u0000/g, "");
+    s = s.replace(/`([^`\n]+)`/g, (_, c) => park(`<code>${c}</code>`));
+    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, url) => {
+      const altText = alt.replace(/["<>]/g, "");
+      if (safeUrl(url, true) && /^data:/i.test(url.trim())) return park(`<img alt="${altText}" src="${esc(safeUrl(url, true))}">`);
+      // Remote images are never auto-loaded (a classic way to leak data out of an agent); link them instead.
+      const u = safeUrl(url, false);
+      return u ? linkTo(u, `Image: ${altText || "open"}`) : m;
+    });
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, url) => {
+      const u = safeUrl(url, false);
+      return u ? linkTo(u, emphasis(label.replace(/\u0000(\d+)\u0000/g, (_, i) => tokens[+i]))) : m;
+    });
+    s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)\u0000]+[^\s<).,;:!?'"\u0000])/g, (m, pre, url) =>
+      pre + linkTo(unesc(url), url));
+    s = emphasis(s);
+    // Restore (tokens never contain other unresolved placeholders except link labels, handled above).
+    return s.replace(/\u0000(\d+)\u0000/g, (_, i) => tokens[+i]);
   }
   function renderMarkdown(src) {
     const lines = esc(src).split("\n");
@@ -390,7 +402,10 @@
       <span class="step-meta">${esc(meta)}</span></li>`;
   }
   const CHOICE_LABEL = { once: "Allow once", session: "Allow for this chat", always: "Always allow", deny: "Deny" };
-  function approvalHTML(a, msgId) {
+  function approvalHTML(a, msgId, live) {
+    if (a.resolved === "expired" || (!a.resolved && !live)) {
+      return `<div class="approval resolved" data-approval="${esc(a.id)}"><p class="approval-done">Expired without an answer: <code>${esc(a.command || a.description || "action")}</code></p></div>`;
+    }
     if (a.resolved) {
       return `<div class="approval resolved${a.resolved === "deny" ? " denied" : ""}" data-approval="${esc(a.id)}"><p class="approval-done">${a.resolved === "deny" ? "You denied" : "You approved"}: <code>${esc(a.command || a.description || "action")}</code>${a.resolved !== "deny" && a.resolved !== "once" ? ` (${esc(CHOICE_LABEL[a.resolved] || a.resolved).toLowerCase()})` : ""}</p></div>`;
     }
@@ -420,7 +435,7 @@
     const flushTrail = () => { if (trail.length) { parts.push(`<ol class="trail">${trail.join("")}</ol>`); trail = []; } };
     for (const it of items) {
       if (it.t) trail.push(toolStepHTML(it.t));
-      else { flushTrail(); parts.push(approvalHTML(it.a, m.id)); }
+      else { flushTrail(); parts.push(approvalHTML(it.a, m.id, streaming)); }
     }
     flushTrail();
     if (streaming && m.statusText) parts.push(`<p class="status-line">${esc(m.statusText)}</p>`);
@@ -672,7 +687,7 @@
     } catch (e) {
       btns.forEach((b) => { b.disabled = false; });
       toast(e.status === 409 ? "That approval already expired." : `Couldn't send your answer: ${e.message}`);
-      if (e.status === 409) { a.resolved = "deny"; updateMessage(msg); }
+      if (e.status === 409) { a.resolved = "expired"; saveConversations(); updateMessage(msg); }
     }
   }
 
@@ -793,8 +808,8 @@
           <label class="switch"><input type="checkbox" id="f-notify" ${settings.notify ? "checked" : ""} aria-label="Notifications"><span></span></label>
         </div>
 
-        <div class="field" style="margin-top:16px">
-          <span id="theme-label" style="font-weight:500;font-size:14.5px">Appearance</span>
+        <div class="field field-gap">
+          <span id="theme-label" class="field-label">Appearance</span>
           <div class="seg" role="group" aria-labelledby="theme-label">
             ${["system", "light", "dark"].map((t) => `<button type="button" data-theme-set="${t}" aria-pressed="${settings.theme === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
           </div>
@@ -951,7 +966,7 @@ hermes gateway</pre>
       ${s.description ? `<div class="row-desc">${esc(s.description)}</div>` : ""}
       ${s.tools && s.tools.length ? `<div class="row-tools">${esc(s.tools.join(", "))}</div>` : ""}</li>`;
     els.sheetBody.innerHTML = `
-      <p class="row-desc" style="margin:0 0 4px">Tools run on your server. Change them with <code>hermes tools</code>.</p>
+      <p class="row-desc sheet-intro">Tools run on your server. Change them with <code>hermes tools</code>.</p>
       ${on.length ? `<h3 class="group-h">Available to the agent</h3><ul class="rows">${on.map(row).join("")}</ul>` : ""}
       ${off.length ? `<h3 class="group-h">Turned off</h3><ul class="rows">${off.map(row).join("")}</ul>` : ""}`;
   }
@@ -975,7 +990,7 @@ hermes gateway</pre>
       const next = j.next_run_at ? new Date(j.next_run_at) : null;
       return `<li class="row"><div class="row-top"><span class="row-name">${esc(j.name || j.id)}</span>${stateTag(j)}</div>
         <div class="row-desc">${esc(j.schedule_display || j.schedule || "")}${next && !isNaN(next) && !paused ? `. Next run ${esc(next.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))}` : ""}</div>
-        ${j.prompt ? `<div class="row-desc" style="color:var(--ink)">${esc(j.prompt.length > 160 ? j.prompt.slice(0, 158) + "…" : j.prompt)}</div>` : ""}
+        ${j.prompt ? `<div class="row-desc row-prompt">${esc(j.prompt.length > 160 ? j.prompt.slice(0, 158) + "…" : j.prompt)}</div>` : ""}
         <div class="row-actions">
           <button type="button" data-job="${esc(j.id)}" data-job-act="run">Run now</button>
           <button type="button" data-job="${esc(j.id)}" data-job-act="${paused ? "resume" : "pause"}">${paused ? "Resume" : "Pause"}</button>
