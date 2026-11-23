@@ -73,6 +73,11 @@ class SetupService : Service(), TerminalSessionClient {
     private var wakeLock: PowerManager.WakeLock? = null
     private var foreground = false
     private val prefs by lazy { getSharedPreferences("setup", Context.MODE_PRIVATE) }
+    lateinit var runtime: HermesRuntime
+        private set
+
+    /** All five install steps are done. */
+    val installed: Boolean get() = steps.all { it.state == State.DONE } || (env.rootfsReady && prefs.getBoolean("done_HERMES", false))
 
     override fun onCreate() {
         super.onCreate()
@@ -83,6 +88,13 @@ class SetupService : Service(), TerminalSessionClient {
         }
         // A rootfs that is gone or half-written undoes the Linux steps.
         if (!env.rootfsReady) for (s in steps) if (s.id >= StepId.LINUX) { s.state = State.WAITING; s.detail = "" }
+        // Step 5 is a live check; once Hermes was installed and checked, treat it as done.
+        if (prefs.getBoolean("done_API", false) && steps.first { it.id == StepId.HERMES }.state == State.DONE) {
+            steps.first { it.id == StepId.API }.apply { state = State.DONE; detail = prefs.getString("detail_API", "") ?: "" }
+        }
+        runtime = HermesRuntime(this, prefs) { changed() }
+        // Hermes was running when the app was last closed: start it again.
+        if (runtime.shouldRun && installed) main.post { runtime.start() }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -242,67 +254,18 @@ class SetupService : Service(), TerminalSessionClient {
         }
     }
 
+    /** Step 5: start Hermes' dashboard (kept running for the app) and check the app can use its API. */
     private fun startDashboard(step: Step) {
-        // A dashboard from an earlier run still holds the port: stop it and wait for the port to free.
-        // Ctrl+C first, like a person would: killing proot itself can leave the dashboard running.
-        dashboardSession?.let { old ->
-            if (old.isRunning) {
-                step.detail = "Stopping the previous Hermes dashboard…"; changed()
-                onMain { old.write("\u0003") }
-                var until = System.currentTimeMillis() + 15_000
-                while (System.currentTimeMillis() < until && old.isRunning) Thread.sleep(300)
-                if (old.isRunning) onMain { old.finishIfRunning() }
-                until = System.currentTimeMillis() + 20_000
-                while (System.currentTimeMillis() < until && http("/api/status", null).first != -1) Thread.sleep(500)
-            }
-        }
-        if (http("/api/status", null).first != -1) {
-            return finish(step, false, "Another Hermes dashboard is still using port $API_PORT. " +
-                "Close its terminal tab (type Ctrl+C in it), or force-stop the app, then try again.")
-        }
-        val token = ByteArray(24).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
-        apiToken = token
-        onMain {
-            startSession(step, env.ubuntuArgs("hermes dashboard --no-open --port $API_PORT"),
-                mapOf("HERMES_DASHBOARD_SESSION_TOKEN" to token))
-        }
-        val deadline = System.currentTimeMillis() + 30 * 60_000L
-        while (true) {
-            if (step.state != State.RUNNING) return
-            val session = step.session
-            if (session != null && !session.isRunning) return // onSessionFinished reports it
-            val (code, _) = http("/api/status", null)
-            if (code == 200) break
-            if (System.currentTimeMillis() > deadline) return finish(step, false, "The dashboard didn't start within 30 minutes.")
-            val waited = (System.currentTimeMillis() - step.startedAt) / 1000
-            step.detail = "Waiting for the dashboard to start (${waited}s). The first start builds its web page, which takes a while."
-            changed()
-            Thread.sleep(3000)
-        }
-        val (open, _) = http("/api/skills", null)
-        val (authed, body) = http("/api/skills", token)
+        val ok = runtime.ensureDashboard { msg -> step.detail = msg; changed() }
+        step.session = runtime.dashboard
+        if (!ok) return finish(step, false, runtime.message)
+        val (open, _) = runtime.http("GET", "/api/skills", auth = false)
+        val (authed, body) = runtime.http("GET", "/api/skills")
         val skills = Regex("\"name\"\\s*:").findAll(body).count()
-        val summary = "Dashboard is up. Without the token: $open. With the token: $authed" +
+        val summary = "Hermes is up. Without the app's key: $open. With it: $authed" +
             (if (authed == 200) " ($skills skills found)." else ".")
         finish(step, authed == 200, summary)
     }
-
-    @Volatile var apiToken: String? = null
-        private set
-    @Volatile private var dashboardSession: TerminalSession? = null
-
-    /** GET http://127.0.0.1:API_PORT[path]; returns (status, body) or (-1, error). */
-    fun http(path: String, token: String?): Pair<Int, String> = try {
-        val c = (URL("http://127.0.0.1:$API_PORT$path").openConnection() as HttpURLConnection).apply {
-            connectTimeout = 3000; readTimeout = 15_000
-            if (token != null) setRequestProperty("X-Hermes-Session-Token", token)
-        }
-        try {
-            val code = c.responseCode
-            val stream = if (code in 200..299) c.inputStream else c.errorStream
-            code to (stream?.bufferedReader()?.use { it.readText().take(200_000) } ?: "")
-        } finally { c.disconnect() }
-    } catch (e: Exception) { -1 to (e.message ?: e.toString()) }
 
     private fun finish(step: Step, ok: Boolean, detail: String) {
         step.state = if (ok) State.DONE else State.FAILED
@@ -323,11 +286,6 @@ class SetupService : Service(), TerminalSessionClient {
 
     // ---------------------------------------------------------------- sessions
 
-    /** Runs `hermes` (its own first-run setup the first time), then leaves a normal shell open. */
-    fun openHermes(): TerminalSession =
-        startSession(null, env.ubuntuArgs("hermes; echo; echo 'Hermes closed. This is a normal Ubuntu shell; type hermes to start it again.'; exec bash -l"),
-            name = "Hermes")
-
     fun openShell(): TerminalSession = startSession(null,
         if (env.rootfsReady) env.ubuntuArgs(null) else arrayOf("sh"))
 
@@ -340,11 +298,25 @@ class SetupService : Service(), TerminalSessionClient {
         session.updateSize(80, 30)
         sessions += session
         step?.session = session
-        if (step?.id == StepId.API) dashboardSession = session
         goForeground(step?.title ?: "Terminal")
         listeners.forEach { it.onSessionsChanged() }
         changed()
         return session
+    }
+
+    /** Starts a named Ubuntu command in a terminal session from any thread and returns the session. */
+    fun startSessionOnMain(name: String, command: String, extraEnv: Map<String, String> = emptyMap()): TerminalSession {
+        var created: TerminalSession? = null
+        onMainSync { created = startSession(null, env.ubuntuArgs(command), extraEnv, name = name) }
+        return created!!
+    }
+
+    /** Runs [block] on the main thread and waits for it (directly when already on it). */
+    fun onMainSync(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) { block(); return }
+        val latch = java.util.concurrent.CountDownLatch(1)
+        main.post { try { block() } finally { latch.countDown() } }
+        latch.await()
     }
 
     fun closeSession(session: TerminalSession) {
@@ -355,7 +327,8 @@ class SetupService : Service(), TerminalSessionClient {
     }
 
     override fun onSessionFinished(finished: TerminalSession) {
-        val step = steps.firstOrNull { it.session === finished && it.state == State.RUNNING }
+        runtime.onSessionFinished(finished)
+        val step = steps.firstOrNull { it.session === finished && it.state == State.RUNNING && it.id != StepId.API }
         if (step != null) {
             val code = finished.exitStatus
             if (step.id == StepId.API) {
@@ -413,6 +386,10 @@ class SetupService : Service(), TerminalSessionClient {
         append("Free space: %.1f GB\n".format(StatFs(filesDir.path).availableBytes / 1e9))
         append("Linux ready: ${env.rootfsReady}\n\n")
         for (s in steps) append("[${s.state}] ${s.title}: ${s.detail}\n")
+        append("\nHermes: ${runtime.status} ${runtime.message}\n")
+        append("AI: ${runtime.aiProvider ?: "not connected"} / ${runtime.aiModel ?: "-"}\n")
+        append("Telegram: ${runtime.telegram} ${runtime.telegramBot ?: ""} ${runtime.telegramMessage}\n")
+        append("Web search: ${runtime.webSearch ?: "off"}\n")
         for (session in sessions) {
             append("\n===== ${session.mSessionName} (")
             append(if (session.isRunning) "running" else describeExit(session.exitStatus))
@@ -420,7 +397,7 @@ class SetupService : Service(), TerminalSessionClient {
             append(session.emulator?.screen?.transcriptText?.takeLast(60_000) ?: "")
             append('\n')
         }
-    }.takeLast(400_000)
+    }.let { runtime.redact(it) }.takeLast(400_000)
 
     // ---------------------------------------------------------------- foreground + wake lock
 
@@ -431,7 +408,7 @@ class SetupService : Service(), TerminalSessionClient {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n: Notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Hermes is working")
+            .setContentTitle("Hermes")
             .setContentText(what)
             .setContentIntent(open)
             .setOngoing(true)

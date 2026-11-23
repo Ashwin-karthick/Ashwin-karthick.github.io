@@ -33,6 +33,7 @@ class MainActivity : Activity(), SetupService.Listener {
     private lateinit var sessionTabs: LinearLayout
     private var shownSession: TerminalSession? = null
     private var ctrlDown = false
+    private var showInstall = false
     private var altDown = false
     private var fontPx = 0
     private lateinit var ctrlKey: TextView
@@ -64,13 +65,8 @@ class MainActivity : Activity(), SetupService.Listener {
 
         findViewById<View>(R.id.tab_setup).setOnClickListener { showPage(terminal = false) }
         findViewById<View>(R.id.tab_terminal).setOnClickListener { showPage(terminal = true) }
-        findViewById<Button>(R.id.run_all).setOnClickListener {
-            val s = service ?: return@setOnClickListener
-            if (s.nextStep() == null) {
-                // Setup is finished: open Hermes itself in the terminal.
-                showSession(s.openHermes()); showPage(terminal = true)
-            } else s.runAllSteps()
-        }
+        findViewById<Button>(R.id.run_all).setOnClickListener { service?.runAllSteps() }
+        findViewById<View>(R.id.toggle_install).setOnClickListener { showInstall = !showInstall; renderSteps() }
         findViewById<Button>(R.id.share_log).setOnClickListener { shareLog() }
         findViewById<Button>(R.id.battery).setOnClickListener { openBatterySettings() }
         buildExtraKeys()
@@ -152,7 +148,7 @@ class MainActivity : Activity(), SetupService.Listener {
             run.isEnabled = !busy
             run.setOnClickListener {
                 if (step.id == SetupService.StepId.LINUX && step.state == SetupService.State.DONE) {
-                    android.app.AlertDialog.Builder(this)
+                    android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                         .setTitle("Reinstall Ubuntu?")
                         .setMessage("This deletes the Linux system and everything installed in it, including Hermes and its settings. You'll need to run the later steps again.")
                         .setPositiveButton("Delete and reinstall") { _, _ -> s.runStep(step.id) }
@@ -171,11 +167,213 @@ class MainActivity : Activity(), SetupService.Listener {
         runAll.isEnabled = !busy
         runAll.text = when {
             busy -> "Working…"
-            next == null -> "Open Hermes"
             next === s.steps.first() -> "Run all steps"
-            else -> "Continue from “${next.title}”"
+            next != null -> "Continue from “${next.title}”"
+            else -> ""
+        }
+
+        // Once installed, the assistant cards lead; the install steps fold away.
+        val installed = next == null && !busy
+        val assistant = findViewById<LinearLayout>(R.id.assistant)
+        val toggle = findViewById<TextView>(R.id.toggle_install)
+        assistant.visibility = if (installed) View.VISIBLE else View.GONE
+        toggle.visibility = if (installed) View.VISIBLE else View.GONE
+        toggle.text = if (showInstall) "Hide install steps" else "Show install steps"
+        stepsBox.visibility = if (!installed || showInstall) View.VISIBLE else View.GONE
+        runAll.visibility = if (installed) View.GONE else View.VISIBLE
+        findViewById<TextView>(R.id.footer_hint).text = if (installed)
+            "Hermes runs inside this app. Keep its notification on and set Battery settings to Unrestricted so it keeps working in the background. The Terminal tab shows what it's doing."
+        else "Each step runs in the built-in terminal. Open the Terminal tab to watch it, or to type commands yourself. If a step fails, tap Share log and send the log back."
+        if (installed) renderAssistant(assistant, s)
+    }
+
+    // ---------------------------------------------------------------- assistant
+
+    private fun renderAssistant(box: LinearLayout, s: SetupService) {
+        val rt = s.runtime
+        box.removeAllViews()
+        val busyOp = rt.busyWith
+
+        // 1. Hermes on/off
+        val (stLabel, stColor) = when (rt.status) {
+            HermesRuntime.Status.RUNNING -> "Running" to R.color.ok
+            HermesRuntime.Status.STARTING -> "Starting" to R.color.accent
+            HermesRuntime.Status.STOPPING -> "Stopping" to R.color.accent
+            HermesRuntime.Status.FAILED -> "Problem" to R.color.danger
+            HermesRuntime.Status.STOPPED -> "Stopped" to R.color.muted
+        }
+        val running = rt.status == HermesRuntime.Status.RUNNING || rt.status == HermesRuntime.Status.STARTING
+        card(box, "Hermes", stLabel, stColor,
+            if (rt.message.isNotEmpty()) rt.message
+            else if (rt.status == HermesRuntime.Status.RUNNING) "Your assistant is on. It answers on Telegram and runs scheduled jobs while this stays on."
+            else "Turn Hermes on to use your assistant.",
+            detailColor = if (rt.status == HermesRuntime.Status.FAILED) R.color.danger else R.color.ink,
+            primary = (if (running) "Stop" else "Start") to {
+                if (running) rt.stop() else {
+                    if (rt.aiProvider == null) toast("Connect an AI provider first, so Hermes has a model to think with.")
+                    rt.start()
+                }
+            },
+            primaryEnabled = rt.status != HermesRuntime.Status.STOPPING,
+            secondary = (rt.gateway ?: rt.dashboard)?.let { sess -> "Show in terminal" to { showSession(sess); showPage(terminal = true) } },
+        )
+
+        // 2. AI provider
+        card(box, "AI model", if (rt.aiProvider != null) "Connected" else "Not connected",
+            if (rt.aiProvider != null) R.color.ok else R.color.signal,
+            if (rt.aiProvider != null) "${rt.aiProvider}, ${rt.aiModel}" else "Hermes needs an AI provider to think with. You'll need an API key from the provider.",
+            primary = (if (rt.aiProvider != null) "Change" else "Connect") to { showAiDialog(rt) },
+            primaryEnabled = busyOp == null,
+        )
+
+        // 3. Telegram
+        val tgState = rt.telegram
+        val (tgLabel, tgColor) = when (tgState) {
+            HermesRuntime.Telegram.CONNECTED -> "Connected" to R.color.ok
+            HermesRuntime.Telegram.FAILED -> "Problem" to R.color.danger
+            HermesRuntime.Telegram.NOT_CONNECTED -> "Not connected" to R.color.muted
+            else -> "Setting up" to R.color.accent
+        }
+        val tgDetail = when (tgState) {
+            HermesRuntime.Telegram.CONNECTED -> "Message @${rt.telegramBot} in Telegram to talk to your assistant. Only your Telegram account can use it."
+            HermesRuntime.Telegram.NOT_CONNECTED -> "Chat with your assistant from Telegram. Hermes creates a private bot for you; you just tap Start in Telegram."
+            else -> rt.telegramMessage
+        }
+        card(box, "Telegram", tgLabel, tgColor, tgDetail,
+            detailColor = if (tgState == HermesRuntime.Telegram.FAILED) R.color.danger else R.color.ink,
+            primary = when (tgState) {
+                HermesRuntime.Telegram.CONNECTED -> "Open chat" to { openUrl("https://t.me/${rt.telegramBot}") }
+                HermesRuntime.Telegram.WAITING -> "Open Telegram" to { rt.telegramLink?.let { openUrl(it) } }
+                HermesRuntime.Telegram.STARTING, HermesRuntime.Telegram.FINISHING -> "Working…" to {}
+                else -> "Connect" to {
+                    if (rt.aiProvider == null) toast("Connect an AI provider first.")
+                    else rt.connectTelegram { link -> openUrl(link) }
+                }
+            },
+            primaryEnabled = tgState != HermesRuntime.Telegram.STARTING && tgState != HermesRuntime.Telegram.FINISHING,
+            secondary = when (tgState) {
+                HermesRuntime.Telegram.WAITING -> "Cancel" to { rt.cancelTelegram() }
+                HermesRuntime.Telegram.CONNECTED -> "Reconnect" to { rt.connectTelegram { link -> openUrl(link) } }
+                else -> null
+            },
+        )
+
+        // 4. Web search
+        card(box, "Web search", if (rt.webSearch != null) "On" else "Off",
+            if (rt.webSearch != null) R.color.ok else R.color.muted,
+            rt.webSearch?.let { "$it. Hermes can look things up on the web." }
+                ?: "Let Hermes search the web. The free option needs no account; it has rate limits.",
+            primary = if (rt.webSearch == null) ("Turn on (free)" to {
+                rt.enableFreeWebSearch { ok, msg -> toast(msg) }
+            }) else null,
+            primaryEnabled = busyOp == null,
+        )
+
+        if (busyOp != null) {
+            box.addView(TextView(this).apply {
+                text = busyOp; textSize = 14f; setTextColor(getColor(R.color.accent))
+                setPadding(4, 0, 4, dp(12))
+            })
         }
     }
+
+    private fun card(
+        box: LinearLayout, title: String, status: String, statusColor: Int, detail: String,
+        detailColor: Int = R.color.ink,
+        primary: Pair<String, () -> Unit>?, primaryEnabled: Boolean = true,
+        secondary: Pair<String, () -> Unit>? = null,
+    ) {
+        val v = layoutInflater.inflate(R.layout.item_step, box, false)
+        v.findViewById<TextView>(R.id.number).visibility = View.GONE
+        (v.findViewById<TextView>(R.id.title).layoutParams as LinearLayout.LayoutParams).marginStart = 0
+        v.findViewById<TextView>(R.id.title).text = title
+        v.findViewById<TextView>(R.id.status).apply { text = status; setTextColor(getColor(statusColor)) }
+        for (id in listOf(R.id.description, R.id.progress)) v.findViewById<View>(id).visibility = View.GONE
+        for (id in listOf(R.id.detail, R.id.actions)) {
+            (v.findViewById<View>(id).layoutParams as LinearLayout.LayoutParams).marginStart = 0
+        }
+        v.findViewById<TextView>(R.id.detail).apply {
+            text = detail; visibility = View.VISIBLE; setTextColor(getColor(detailColor))
+        }
+        v.findViewById<Button>(R.id.run).apply {
+            if (primary == null) visibility = View.GONE
+            else { text = primary.first; isEnabled = primaryEnabled; setOnClickListener { primary.second() } }
+        }
+        v.findViewById<Button>(R.id.view_output).apply {
+            if (secondary == null) visibility = View.GONE
+            else { visibility = View.VISIBLE; text = secondary.first; setOnClickListener { secondary.second() } }
+        }
+        box.addView(v)
+    }
+
+    private fun showAiDialog(rt: HermesRuntime) {
+        val pad = dp(20)
+        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(pad, dp(8), pad, 0) }
+        val group = android.widget.RadioGroup(this)
+        HermesRuntime.PROVIDERS.forEachIndexed { i, p ->
+            group.addView(android.widget.RadioButton(this).apply {
+                id = View.generateViewId(); text = p.label; textSize = 16f; tag = i
+                setTextColor(getColor(R.color.ink)); minHeight = dp(44)
+            })
+        }
+        (group.getChildAt(0) as android.widget.RadioButton).isChecked = true
+        form.addView(group)
+        val link = TextView(this).apply {
+            textSize = 14f; setTextColor(getColor(R.color.accent)); setPadding(0, dp(10), 0, dp(6)); minHeight = dp(44)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        form.addView(link)
+        val key = android.widget.EditText(this).apply {
+            hint = "Paste your API key"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD or
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            textSize = 16f; setTextColor(getColor(R.color.ink)); setHintTextColor(getColor(R.color.muted))
+            isSingleLine = true
+        }
+        form.addView(key)
+        val note = TextView(this).apply {
+            textSize = 13.5f; setTextColor(getColor(R.color.muted)); setPadding(0, dp(8), 0, dp(4))
+            text = "The key is checked with the provider, then saved inside Hermes on this phone. Claude Pro/Max subscription sign-in isn't supported yet; use an API key."
+        }
+        form.addView(note)
+        val result = TextView(this).apply { textSize = 14.5f; setPadding(0, dp(6), 0, dp(6)); visibility = View.GONE }
+        form.addView(result)
+
+        fun selected() = HermesRuntime.PROVIDERS[(group.findViewById<View>(group.checkedRadioButtonId).tag as Int)]
+        fun updateLink() { val p = selected(); link.text = "Get a ${p.label.substringBefore(" (")} key ↗"; link.setOnClickListener { openUrl(p.keyUrl) } }
+        updateLink()
+        group.setOnCheckedChangeListener { _, _ -> updateLink() }
+
+        val dialog = android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Connect an AI provider")
+            .setView(android.widget.ScrollView(this).apply { addView(form) })
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Check and save", null)
+            .create()
+        dialog.setOnShowListener {
+            val save = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            save.setOnClickListener {
+                val value = key.text.toString().trim()
+                if (value.length < 8) { result.visibility = View.VISIBLE; result.setTextColor(getColor(R.color.danger)); result.text = "Paste the whole key first."; return@setOnClickListener }
+                save.isEnabled = false
+                result.visibility = View.VISIBLE; result.setTextColor(getColor(R.color.ink))
+                result.text = "Checking the key and saving it. If Hermes isn't running yet, it starts first (about a minute)…"
+                rt.connectAi(selected(), value) { ok, msg ->
+                    if (ok) { key.setText(""); dialog.dismiss(); toast(msg) }
+                    else { save.isEnabled = true; result.setTextColor(getColor(R.color.danger)); result.text = msg }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun openUrl(url: String) {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        catch (_: Exception) { toast("Couldn't open $url") }
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun circle(color: Int) = android.graphics.drawable.GradientDrawable().apply {
         shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(color)
