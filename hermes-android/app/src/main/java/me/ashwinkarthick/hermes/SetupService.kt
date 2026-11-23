@@ -244,13 +244,21 @@ class SetupService : Service(), TerminalSessionClient {
 
     private fun startDashboard(step: Step) {
         // A dashboard from an earlier run still holds the port: stop it and wait for the port to free.
+        // Ctrl+C first, like a person would: killing proot itself can leave the dashboard running.
         dashboardSession?.let { old ->
             if (old.isRunning) {
                 step.detail = "Stopping the previous Hermes dashboard…"; changed()
-                onMain { old.finishIfRunning() }
-                val until = System.currentTimeMillis() + 20_000
+                onMain { old.write("\u0003") }
+                var until = System.currentTimeMillis() + 15_000
+                while (System.currentTimeMillis() < until && old.isRunning) Thread.sleep(300)
+                if (old.isRunning) onMain { old.finishIfRunning() }
+                until = System.currentTimeMillis() + 20_000
                 while (System.currentTimeMillis() < until && http("/api/status", null).first != -1) Thread.sleep(500)
             }
+        }
+        if (http("/api/status", null).first != -1) {
+            return finish(step, false, "Another Hermes dashboard is still using port $API_PORT. " +
+                "Close its terminal tab (type Ctrl+C in it), or force-stop the app, then try again.")
         }
         val token = ByteArray(24).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         apiToken = token

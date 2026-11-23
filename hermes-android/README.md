@@ -39,7 +39,7 @@ Measured on a desktop running the same ARM64 Ubuntu under emulation (qemu), not 
 |---|---|---|
 | Download and unpack Ubuntu | seconds (30 MB download) | about 110 MB |
 | Prepare Ubuntu | about 4 minutes | about 540 MB |
-| Install Hermes (v2026.9.24) | about 12 minutes | about 3.9 GB |
+| Install Hermes (v0.23.3, released 2026.9.24) | 12 to 21 minutes | about 3.8 GB |
 | Start Hermes, test the connection | about 80 seconds to first start | |
 
 Keep at least 5 GB free (step 1 checks this). Phone times will differ from these.
