@@ -827,7 +827,7 @@
         <pre>API_SERVER_ENABLED=true
 API_SERVER_KEY=choose-a-long-random-key
 API_SERVER_CORS_ORIGINS=${esc(location.origin)}
-hermes gateway</pre>
+hermes gateway run</pre>
         <p>Your phone needs an HTTPS address for the server. A tunnel such as Tailscale Serve or Cloudflare Tunnel, or a reverse proxy with a certificate, gives you one. Make sure the proxy doesn't buffer or time out streaming responses.</p>
         <h3>Your data</h3>
         <p>Conversations are kept in this browser. Hermes also keeps its own session history on the server.</p>

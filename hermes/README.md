@@ -27,7 +27,7 @@ Once this branch is merged and GitHub Pages publishes it, the app lives at `http
 
    `API_SERVER_CORS_ORIGINS` must be the exact origin the app is served from: scheme and host, no path, no trailing slash.
 
-2. Start the gateway with `hermes gateway`. The API listens on `127.0.0.1:8642` by default.
+2. Start the gateway with `hermes gateway run`. The API listens on `127.0.0.1:8642` by default.
 
 3. **Give it an HTTPS address your phone can reach.** The app is served over HTTPS, so browsers block calls to plain `http://` servers. Some options:
    - Tailscale Serve: `tailscale serve --bg 8642`, then use `https://<machine>.<tailnet>.ts.net`.
