@@ -99,18 +99,24 @@ class LinuxEnv(private val context: Context) {
      */
     fun clearStaleHermesPackages(): Boolean {
         val hermes = File(rootfs, "root/.hermes").toPath()
-        if (!Files.isDirectory(hermes, LinkOption.NOFOLLOW_LINKS)) return false
-        var stale = false
-        Files.walkFileTree(hermes, object : SimpleFileVisitor<Path>() {
-            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                val n = file.fileName.toString()
-                if (n.startsWith(".l2s.") || n.startsWith(".proot.l2s.")) { stale = true; return FileVisitResult.TERMINATE }
-                return FileVisitResult.CONTINUE
-            }
-            override fun visitFileFailed(file: Path, exc: java.io.IOException) = FileVisitResult.CONTINUE
-        })
-        if (stale) for (dir in listOf("cache/uv", "installs")) deleteTree(hermes.resolve(dir))
-        return stale
+        // Only these two folders are scanned and cleared: they are rebuilt by the installer. Other
+        // folders (for example the git checkout) can hold harmless placeholders and are left alone,
+        // so a healthy install is never wiped by re-running the step.
+        var cleared = false
+        for (dir in listOf("cache/uv", "installs").map { hermes.resolve(it) }) {
+            if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) continue
+            var stale = false
+            Files.walkFileTree(dir, object : SimpleFileVisitor<Path>() {
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    val n = file.fileName.toString()
+                    if (n.startsWith(".l2s.") || n.startsWith(".proot.l2s.")) { stale = true; return FileVisitResult.TERMINATE }
+                    return FileVisitResult.CONTINUE
+                }
+                override fun visitFileFailed(file: Path, exc: java.io.IOException) = FileVisitResult.CONTINUE
+            })
+            if (stale) { deleteTree(dir); cleared = true }
+        }
+        return cleared
     }
 
     /** Deletes a tree without following symbolic links (a link is removed, never its target). */

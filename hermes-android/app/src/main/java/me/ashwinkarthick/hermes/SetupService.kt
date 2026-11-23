@@ -126,6 +126,11 @@ class SetupService : Service(), TerminalSessionClient {
                     StepId.LINUX -> installLinux(step)
                     StepId.BASE -> onMain { startSession(step, env.ubuntuArgs("bash /opt/hermes-mobile/setup-base.sh")) }
                     StepId.HERMES -> {
+                        val freeGb = StatFs(filesDir.path).availableBytes / 1e9
+                        if (freeGb < 3.5) {
+                            finish(step, false, "Only %.1f GB free. Installing Hermes needs about 3.5 GB; free up space and try again.".format(freeGb))
+                            return@execute
+                        }
                         if (env.clearStaleHermesPackages()) {
                             step.detail = "Cleared leftovers from an earlier failed install."; changed()
                         }
@@ -146,8 +151,8 @@ class SetupService : Service(), TerminalSessionClient {
             return finish(step, false, "This phone's processor (${abis.joinToString()}) isn't supported. The built-in Linux needs a 64-bit ARM phone.")
         }
         val freeGb = StatFs(filesDir.path).availableBytes / 1e9
-        if (freeGb < 3.0) {
-            return finish(step, false, "Only %.1f GB free. Free up at least 3 GB and try again.".format(freeGb))
+        if (freeGb < 5.0) {
+            return finish(step, false, "Only %.1f GB free. Ubuntu and Hermes need about 4 GB; free up at least 5 GB and try again.".format(freeGb))
         }
         if (!env.proot.isFile) return finish(step, false, "The app is missing its Linux runner (proot). Reinstall the app.")
         env.prepareHost()
@@ -238,6 +243,15 @@ class SetupService : Service(), TerminalSessionClient {
     }
 
     private fun startDashboard(step: Step) {
+        // A dashboard from an earlier run still holds the port: stop it and wait for the port to free.
+        dashboardSession?.let { old ->
+            if (old.isRunning) {
+                step.detail = "Stopping the previous Hermes dashboard…"; changed()
+                onMain { old.finishIfRunning() }
+                val until = System.currentTimeMillis() + 20_000
+                while (System.currentTimeMillis() < until && http("/api/status", null).first != -1) Thread.sleep(500)
+            }
+        }
         val token = ByteArray(24).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         apiToken = token
         onMain {
@@ -267,6 +281,7 @@ class SetupService : Service(), TerminalSessionClient {
 
     @Volatile var apiToken: String? = null
         private set
+    @Volatile private var dashboardSession: TerminalSession? = null
 
     /** GET http://127.0.0.1:API_PORT[path]; returns (status, body) or (-1, error). */
     fun http(path: String, token: String?): Pair<Int, String> = try {
@@ -312,6 +327,7 @@ class SetupService : Service(), TerminalSessionClient {
         session.updateSize(80, 30)
         sessions += session
         step?.session = session
+        if (step?.id == StepId.API) dashboardSession = session
         goForeground(step?.title ?: "Terminal")
         listeners.forEach { it.onSessionsChanged() }
         changed()

@@ -13,8 +13,8 @@ android {
         // 28 on purpose: apps targeting 29+ may not run programs from their own storage, which the
         // bundled Linux needs (same choice as Termux). This also means no Google Play listing.
         targetSdk = 28
-        versionCode = 3
-        versionName = "0.1.2-proof"
+        versionCode = 4
+        versionName = "0.1.3-proof"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -73,5 +73,6 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     System.getProperty("rootfs.tarball")?.let { systemProperty("rootfs.tarball", it) }
+    System.getProperty("rootfs.keep")?.let { systemProperty("rootfs.keep", it) }
     testLogging { events("passed", "failed", "skipped"); showStandardStreams = true; exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }

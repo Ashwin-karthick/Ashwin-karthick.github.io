@@ -42,7 +42,7 @@ Measured on a desktop running the same ARM64 Ubuntu under emulation (qemu), not 
 | Install Hermes (v2026.9.24) | about 12 minutes | about 3.9 GB |
 | Start Hermes, test the connection | about 80 seconds to first start | |
 
-Keep at least 5 GB free. Phone times will differ from these.
+Keep at least 5 GB free (step 1 checks this). Phone times will differ from these.
 
 During **Install Hermes**, one line fails: `cua-driver` (desktop computer-use) needs a graphical
 display, which a phone terminal doesn't have. The installer continues and the step still succeeds.
@@ -53,14 +53,24 @@ running, which a later phase will start.
 
 ## If a step says "Android stopped this step (signal 9)"
 
-Android 12 and later stop background child processes when there are too many, or when they use a
-lot of CPU. A long install can trigger this.
+Android 12 and later stop child processes when all apps together have more than 32 of them, or
+when one uses a lot of CPU in the background. A long install can trigger this. Turn it off for
+your Android version, then tap **Try again** on the failed step (steps are safe to rerun):
 
-- **Android 14 and later:** turn on Developer options, enable **Disable child process restrictions**, and restart the phone.
-- **Android 12 and 13:** this needs a computer with `adb`:
+- **Android 14 and later:** turn on Developer options (tap Build number seven times in About phone),
+  then in Developer options turn on **Disable child process restrictions**. It stays off only while
+  Developer options are on. The adb command below also works and isn't undone by turning Developer
+  options off.
+- **Android 12L and 13:** needs a computer with `adb`:
   `adb shell settings put global settings_enable_monitor_phantom_procs false`
+- **Android 12:** needs `adb`:
+  `adb shell device_config put activity_manager max_phantom_processes 2147483647`
+  Google Play services can reset this a few minutes later. If it does, also run
+  `adb shell device_config set_sync_disabled_for_tests persistent`. Android 12 has no switch for the
+  CPU-based kill; keeping the app on screen during long steps helps.
 
-Then tap **Try again** on the failed step. Steps are safe to rerun.
+Source: [Phantom, cached and empty processes](https://github.com/agnostic-apollo/Android-Docs/blob/master/en/docs/apps/processes/phantom-cached-and-empty-processes.md)
+(community documentation, not official Android docs).
 
 ## Why target SDK 28
 

@@ -64,6 +64,17 @@ class RootfsExtractorTest {
         }
     }
 
+    /** With -Drootfs.keep=/dir, unpacks into /dir and keeps it (used to boot the app's own output). */
+    @Test
+    fun extractAndKeep() {
+        val tarball = System.getProperty("rootfs.tarball")?.let(::File)
+        val keep = System.getProperty("rootfs.keep")?.let(::File)
+        assumeTrue("set -Drootfs.tarball and -Drootfs.keep to run", tarball != null && tarball.isFile && keep != null)
+        keep!!.deleteRecursively()
+        val result = RootfsExtractor(chmod = ::posixChmod).extract(tarball!!, keep)
+        println("Kept extraction in $keep: $result")
+    }
+
     private data class Entry(val type: String, val mode: Int, val size: Long, val linkTarget: String?)
 
     private fun walk(root: Path): Map<String, Entry> {
