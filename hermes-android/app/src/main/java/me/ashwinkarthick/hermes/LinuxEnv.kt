@@ -3,6 +3,12 @@ package me.ashwinkarthick.hermes
 import android.content.Context
 import android.system.Os
 import java.io.File
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 /**
  * Where the bundled Linux lives on the phone, and how to start programs inside it.
@@ -83,6 +89,41 @@ class LinuxEnv(private val context: Context) {
             context.assets.open("guest/$name").use { input -> out.outputStream().use { input.copyTo(it) } }
             Os.chmod(out.path, "755".toInt(8))
         }
+    }
+
+    /**
+     * Earlier attempts (before PROOT_L2S_DIR was set) left proot's hard-link placeholders inside
+     * Hermes' package folders; uv then fails on them, and proot hides them from Ubuntu so they
+     * can't be removed from inside. Remove those rebuildable folders from the Android side.
+     * Hermes' settings and data in ~/.hermes are kept. Returns true when something was cleared.
+     */
+    fun clearStaleHermesPackages(): Boolean {
+        val hermes = File(rootfs, "root/.hermes").toPath()
+        if (!Files.isDirectory(hermes, LinkOption.NOFOLLOW_LINKS)) return false
+        var stale = false
+        Files.walkFileTree(hermes, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                val n = file.fileName.toString()
+                if (n.startsWith(".l2s.") || n.startsWith(".proot.l2s.")) { stale = true; return FileVisitResult.TERMINATE }
+                return FileVisitResult.CONTINUE
+            }
+            override fun visitFileFailed(file: Path, exc: java.io.IOException) = FileVisitResult.CONTINUE
+        })
+        if (stale) for (dir in listOf("cache/uv", "installs")) deleteTree(hermes.resolve(dir))
+        return stale
+    }
+
+    /** Deletes a tree without following symbolic links (a link is removed, never its target). */
+    private fun deleteTree(root: Path) {
+        if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return
+        Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                Files.deleteIfExists(file); return FileVisitResult.CONTINUE
+            }
+            override fun postVisitDirectory(dir: Path, exc: java.io.IOException?): FileVisitResult {
+                Files.deleteIfExists(dir); return FileVisitResult.CONTINUE
+            }
+        })
     }
 
     /** Environment for a terminal session (Android side; the launcher builds a clean one for Ubuntu). */

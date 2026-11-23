@@ -125,7 +125,12 @@ class SetupService : Service(), TerminalSessionClient {
                     StepId.PHONE -> checkPhone(step)
                     StepId.LINUX -> installLinux(step)
                     StepId.BASE -> onMain { startSession(step, env.ubuntuArgs("bash /opt/hermes-mobile/setup-base.sh")) }
-                    StepId.HERMES -> onMain { startSession(step, env.ubuntuArgs("bash /opt/hermes-mobile/install-hermes.sh")) }
+                    StepId.HERMES -> {
+                        if (env.clearStaleHermesPackages()) {
+                            step.detail = "Cleared leftovers from an earlier failed install."; changed()
+                        }
+                        onMain { startSession(step, env.ubuntuArgs("bash /opt/hermes-mobile/install-hermes.sh")) }
+                    }
                     StepId.API -> startDashboard(step)
                 }
             } catch (t: Throwable) {
