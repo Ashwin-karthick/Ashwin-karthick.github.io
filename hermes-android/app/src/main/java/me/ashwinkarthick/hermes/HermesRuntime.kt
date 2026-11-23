@@ -110,20 +110,42 @@ class HermesRuntime(
     /** Hermes' gateway: Telegram, scheduled jobs and chat sessions. */
     private fun ensureGateway(progress: (String) -> Unit): Boolean {
         if (gateway?.isRunning == true) return true
-        val started = System.currentTimeMillis()
-        // --external-supervisor: this app owns the gateway. Hermes' own restarts (after a settings
-        // change, an update or an in-chat /restart) then exit back to the app, which starts it again.
-        val session = svc.startSessionOnMain("Hermes gateway", "hermes gateway run --external-supervisor")
-        gateway = session
-        while (true) {
-            if (!session.isRunning) return fail("Hermes' background service stopped (${exit(session)}). Open its terminal tab to see why.")
-            val (code, body) = http("GET", "/api/status")
-            if (code == 200 && runCatching { JSONObject(body).optBoolean("gateway_running") }.getOrDefault(false)) return true
-            val waited = (System.currentTimeMillis() - started) / 1000
-            if (waited > 10 * 60) return fail("Hermes' background service didn't start within 10 minutes.")
-            progress("Starting Hermes' background service (${waited}s)…")
-            Thread.sleep(2000)
+        // Hermes can start a gateway of its own (for example right after Telegram setup). Only one
+        // may run, and it must be the app's so the app can keep it alive; stop any other first.
+        repeat(2) { attempt ->
+            stopForeignGateway(progress)
+            val started = System.currentTimeMillis()
+            val session = svc.startSessionOnMain("Hermes gateway", "hermes gateway run --external-supervisor")
+            gateway = session
+            while (true) {
+                val (code, body) = http("GET", "/api/status")
+                val up = code == 200 && runCatching { JSONObject(body).optBoolean("gateway_running") }.getOrDefault(false)
+                if (!session.isRunning) {
+                    if (up && attempt == 0) break        // another gateway won the race: stop it, try again
+                    return fail("Hermes' background service stopped (${exit(session)}). Open its terminal tab to see why.")
+                }
+                if (up) return true
+                val waited = (System.currentTimeMillis() - started) / 1000
+                if (waited > 10 * 60) return fail("Hermes' background service didn't start within 10 minutes.")
+                progress("Starting Hermes' background service (${waited}s)…")
+                Thread.sleep(2000)
+            }
         }
+        return fail("Another Hermes gateway kept starting. Force-stop the app and open it again.")
+    }
+
+    private fun gatewayReportedRunning(): Boolean {
+        val (code, body) = http("GET", "/api/status")
+        return code == 200 && runCatching { JSONObject(body).optBoolean("gateway_running") }.getOrDefault(false)
+    }
+
+    /** Stops a gateway this app didn't start (only called while the app's own isn't running). */
+    private fun stopForeignGateway(progress: (String) -> Unit) {
+        if (!gatewayReportedRunning()) return
+        progress("Stopping an extra copy of Hermes' background service…")
+        val stopper = svc.startSessionOnMain("Hermes (stop extra gateway)", "hermes gateway stop")
+        val until = System.currentTimeMillis() + 60_000
+        while (System.currentTimeMillis() < until && (stopper.isRunning || gatewayReportedRunning())) Thread.sleep(1000)
     }
 
     /** Settings are read when the gateway starts, so restart it after a change (if it is running). */
@@ -256,6 +278,9 @@ class HermesRuntime(
                 if (ac != 200) return@execute setTelegram(Telegram.FAILED, "Couldn't save the Telegram bot (${detail(ac, ab)}).")
                 prefs.edit().putString("telegram_bot", bot.ifEmpty { "your bot" }).apply()
                 setTelegram(Telegram.CONNECTED, "")
+                // Saving makes Hermes start a restart of its own in the background; give it a moment
+                // so the app's (re)start below replaces whatever that left running.
+                Thread.sleep(8000)
                 // Telegram only answers while the gateway runs: start it, or restart it to load the bot.
                 if (gateway?.isRunning == true) restartGatewayIfRunning() else svc.onMainSync { start() }
             } catch (t: Throwable) {
